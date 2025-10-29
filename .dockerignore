@@ -1,0 +1,56 @@
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+env/
+venv/
+.venv
+
+# Pip logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Git
+.git
+.gitignore
+
+# Documentation (not needed in container)
+README.md
+DEPLOYMENT-GUIDE.md
+AWS-DEPLOYMENT-GUIDE.md
+ML-FEATURES.md
+*.md
+
+# Kubernetes files (not using in Docker)
+k8s-deployment.yaml
+
+# ML Training (not needed in production container)
+ml_training/
+dataset/
+
+# Generated runtime files
+uploads/*
+outputs/*
+
+# Video files (too large, generated at runtime)
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Excel results (generated at runtime)
+*.xlsx
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

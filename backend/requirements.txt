@@ -1,0 +1,5 @@
+flask
+flask-cors
+psutil
+opencv-python-headless
+openpyxl

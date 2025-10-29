@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: green-video
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: green-video
+  template:
+    metadata:
+      labels:
+        app: green-video
+    spec:
+      containers:
+      - name: green-video
+        image: badal-web:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+        volumeMounts:
+        - name: uploads
+          mountPath: /app/uploads
+        - name: outputs
+          mountPath: /app/outputs
+      volumes:
+      - name: uploads
+        hostPath:
+          path: /run/desktop/mnt/host/c/Users/saran/Downloads/badal/uploads
+          type: DirectoryOrCreate
+      - name: outputs
+        hostPath:
+          path: /run/desktop/mnt/host/c/Users/saran/Downloads/badal/outputs
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: green-video
+spec:
+  type: LoadBalancer
+  selector:
+    app: green-video
+  ports:
+  - port: 80
+    targetPort: 5000

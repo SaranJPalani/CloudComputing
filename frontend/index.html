@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Green Video Transcoder</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Green AI Video Transcoding</h1>
+        <p>Compare energy consumption: Normal vs Green AI optimization</p>
+        
+        <div class="upload-section">
+            <input type="file" id="videoInput" accept="video/*">
+            <button onclick="uploadVideo()">Upload & Transcode</button>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            Processing video...
+        </div>
+
+        <div id="results" class="results" style="display: none;">
+            <h2>Results</h2>
+            
+            <div class="complexity-info">
+                <h3>Video Complexity Analysis</h3>
+                <p id="complexityScore">0/10</p>
+                <p id="complexityLabel">Analyzing...</p>
+            </div>
+            
+            <div class="comparison">
+                <div class="metric-card">
+                    <h3>Normal Transcoding</h3>
+                    <p class="energy-value" id="normalEnergy">0 J</p>
+                    <p class="time-value" id="normalTime">0 seconds</p>
+                </div>
+
+                <div class="metric-card green">
+                    <h3>Green AI Transcoding</h3>
+                    <p class="energy-value" id="greenEnergy">0 J</p>
+                    <p class="time-value" id="greenTime">0 seconds</p>
+                </div>
+            </div>
+
+            <div class="savings">
+                <h3>Savings Summary</h3>
+                <p id="savingsText">0% energy reduction</p>
+                <p id="savingsValue">0 Joules saved</p>
+            </div>
+
+            <div class="video-comparison">
+                <h3>Compare Videos</h3>
+                <div class="videos">
+                    <div class="video-player">
+                        <h4>Normal</h4>
+                        <video id="normalVideo" controls width="100%"></video>
+                        <div class="settings-panel" id="normalSettings">
+                            <h5>⚙️ Encoding Settings</h5>
+                            <!-- Settings will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    <div class="video-player">
+                        <h4>Green AI</h4>
+                        <video id="greenVideo" controls width="100%"></video>
+                        <div class="settings-panel" id="greenSettings">
+                            <h5>⚙️ Encoding Settings</h5>
+                            <!-- Settings will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
