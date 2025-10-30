@@ -291,16 +291,31 @@ def transcode_video(input_path, output_path, mode, complexity, video_info=None):
     
     # Measure baseline CPU before starting
     baseline_cpu = psutil.cpu_percent(interval=1.0)
-    
+
+    # Optional FFmpeg warm-up: run a very short FFmpeg invocation to initialize codecs
+    # This helps exclude FFmpeg startup/initialization time from the measured duration.
+    try:
+        warmup_cmd = [
+            'ffmpeg', '-hide_banner', '-loglevel', 'error',
+            '-ss', '0', '-t', '0.1', '-i', input_path,
+            '-f', 'null', '-'  # discard output
+        ]
+        # Run warm-up (do not fail the whole transcoding if warmup errors)
+        subprocess.run(warmup_cmd, capture_output=True, text=True, timeout=10)
+        print("FFmpeg warm-up completed")
+    except Exception as e:
+        print(f"FFmpeg warm-up failed (ignored): {e}")
+
     # Start CPU monitoring in background thread
     def monitor_cpu():
         while monitoring['active']:
             cpu_percentages.append(psutil.cpu_percent(interval=0.2))
-    
+
     import threading
     monitor_thread = threading.Thread(target=monitor_cpu, daemon=True)
-    
-    start_time = time.time()
+
+    # Use a high-resolution timer and start it immediately before the actual transcode
+    start_time = time.perf_counter()
     monitor_thread.start()
     
     settings = {}  # Track all encoding settings
@@ -364,7 +379,7 @@ def transcode_video(input_path, output_path, mode, complexity, video_info=None):
     # Run FFmpeg transcoding
     result = subprocess.run(cmd, capture_output=True, text=True)
     
-    end_time = time.time()
+    end_time = time.perf_counter()
     
     # Stop monitoring and wait for thread
     monitoring['active'] = False
