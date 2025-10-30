@@ -596,7 +596,7 @@ du -sh ~/badal/*
 cd C:\Users\saran\Downloads\badal
 
 # Upload only backend changes
-scp -i C:\Users\saran\.ssh\green-ai-key.pem -r backend ubuntu@XX.XXX.XXX.XXX:~/badal/
+scp -i C:\Users\saran\.ssh\green-ai-key.pem -r backend ubuntu@3.110.115.73:~/badal/
 
 # Or upload frontend changes
 scp -i C:\Users\saran\.ssh\green-ai-key.pem -r frontend ubuntu@XX.XXX.XXX.XXX:~/badal/
