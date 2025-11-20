@@ -156,7 +156,7 @@ Successfully processed 1 files; Failed processing 0 files
 
 ```powershell
 # Replace XX.XXX.XXX.XXX with YOUR instance's Public IPv4 address
-ssh -i C:\Users\saran\.ssh\green-ai-key.pem ubuntu@3.110.115.73
+ssh -i C:\Users\saran\.ssh\green-ai-key.pem ubuntu@13.203.204.19
 ```
 
 **First time connecting, you'll see:**

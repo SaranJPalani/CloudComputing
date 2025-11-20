@@ -24,6 +24,11 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 # Source: BESCOM weighted average emission factor 2023-24: 0.71 tCO2/MWh
 CARBON_INTENSITY = 710  # g CO2/kWh
 
+# EC2 Power Calibration Results (measured on 2025-11-20)
+# t2.micro instance-specific power consumption
+P_IDLE_W = 0.016  # Watts - idle power consumption
+P_MAX_W = 28.000  # Watts - max load power consumption
+
 def predict_optimal_preset(complexity, width, height, fps, size_mb):
     """
     Determine optimal FFmpeg preset based on video complexity
@@ -117,12 +122,12 @@ def analyze_video_complexity(video_path):
 
 def calculate_energy(duration, cpu_percent):
     """
-    Calculate energy consumption in Joules
+    Calculate energy consumption in Joules using calibrated EC2 power model
     Energy (J) = Power (W) × Time (s)
+    Power = P_idle + (P_max - P_idle) × (CPU% / 100)
     """
-    # AMD Ryzen 7 7735U - TDP: 28W (boost mode for heavy workloads)
-    CPU_TDP = 28
-    power_watts = CPU_TDP * (cpu_percent / 100)
+    # Use EC2-calibrated power values (linear interpolation between idle and max)
+    power_watts = P_IDLE_W + (P_MAX_W - P_IDLE_W) * (cpu_percent / 100)
     energy_joules = power_watts * duration
     return round(energy_joules, 2)
 
