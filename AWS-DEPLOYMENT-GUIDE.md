@@ -260,7 +260,7 @@ exit
 
 **Then SSH back in:**
 ```powershell
-ssh -i C:\Users\saran\.ssh\green-ai-key.pem ubuntu@3.110.163.52
+ssh -i C:\Users\saran\.ssh\green-ai-key.pem ubuntu@13.233.131.99
 ```
 
 ---
@@ -602,7 +602,7 @@ scp -i C:\Users\saran\.ssh\green-ai-key.pem -r backend ubuntu@3.110.115.248:~/ba
 scp -i C:\Users\saran\.ssh\green-ai-key.pem -r frontend ubuntu@XX.XXX.XXX.XXX:~/badal/
 
 # Or upload everything
-scp -i C:\Users\saran\.ssh\green-ai-key.pem -r . ubuntu@3.110.163.52:~/badal/
+scp -i C:\Users\saran\.ssh\green-ai-key.pem -r . ubuntu@13.203.159.48:~/badal/
 ```
 
 ### Step 2: Rebuild on EC2

@@ -94,6 +94,47 @@ button:hover {
     margin-top: 5px;
 }
 
+.size-value {
+    font-size: 14px;
+    color: #666;
+    margin: 5px 0;
+}
+
+.storage-saved {
+    font-size: 13px;
+    color: #1976d2;
+    font-weight: 600;
+    margin: 3px 0;
+}
+
+.co2-value {
+    font-size: 13px;
+    color: #555;
+    margin: 3px 0;
+}
+
+.co2-saved {
+    font-size: 13px;
+    color: #2e7d32;
+    font-weight: 600;
+    margin: 3px 0;
+}
+
+.video-co2 {
+    font-size: 13px;
+    color: #666;
+    margin: 5px 0;
+    text-align: center;
+}
+
+.video-co2-saved {
+    font-size: 13px;
+    color: #2e7d32;
+    font-weight: 600;
+    margin: 5px 0;
+    text-align: center;
+}
+
 .energy-value {
     font-size: 32px;
     font-weight: bold;

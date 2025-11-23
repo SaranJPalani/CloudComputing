@@ -42,6 +42,11 @@ function displayResults(data) {
     else complexityLabel = 'High (Complex video)';
     document.getElementById('complexityLabel').textContent = complexityLabel;
     
+    // File size metrics
+    document.getElementById('normalSize').textContent = `${data.normal_size_mb} MB`;
+    document.getElementById('ruleSize').textContent = `${data.rule_size_mb} MB`;
+    document.getElementById('mlSize').textContent = `${data.ml_size_mb} MB`;
+    
     // Energy metrics for all 3 methods
     document.getElementById('normalEnergy').textContent = `${data.normal_energy} J`;
     document.getElementById('normalTime').textContent = `${data.normal_time}s`;
@@ -54,11 +59,40 @@ function displayResults(data) {
     document.getElementById('mlTime').textContent = `${data.ml_time}s`;
     document.getElementById('mlSavings').textContent = `${data.ml_savings_percent}% saved`;
     
-    // Savings summary (use ML if available, else rule-based)
-    const bestSavings = data.ml_available ? data.ml_savings_percent : data.rule_savings_percent;
-    const bestMethod = data.ml_available ? 'ML-Optimized' : 'Rule-based';
-    document.getElementById('savingsText').textContent = `${bestSavings}% energy reduction (${bestMethod})`;
-    document.getElementById('savingsValue').textContent = `Best: ${Math.max(data.rule_savings, data.ml_savings)} Joules saved`;
+    // Storage savings
+    document.getElementById('ruleStorageSaved').textContent = 
+        `${data.rule_storage_saved_mb >= 0 ? '+' : ''}${data.rule_storage_saved_mb.toFixed(2)} MB (${data.rule_storage_saved_percent >= 0 ? '+' : ''}${data.rule_storage_saved_percent.toFixed(1)}%)`;
+    document.getElementById('mlStorageSaved').textContent = 
+        `${data.ml_storage_saved_mb >= 0 ? '+' : ''}${data.ml_storage_saved_mb.toFixed(2)} MB (${data.ml_storage_saved_percent >= 0 ? '+' : ''}${data.ml_storage_saved_percent.toFixed(1)}%)`;
+    
+    // CO2 reduction
+    document.getElementById('normalCO2').textContent = `${data.co2_normal.toFixed(4)} g CO₂`;
+    document.getElementById('ruleCO2').textContent = `${data.co2_rule.toFixed(4)} g CO₂`;
+    document.getElementById('mlCO2').textContent = `${data.co2_ml.toFixed(4)} g CO₂`;
+    
+    document.getElementById('ruleCO2Saved').textContent = `${data.co2_rule_saved.toFixed(4)} g CO₂ saved`;
+    document.getElementById('mlCO2Saved').textContent = `${data.co2_ml_saved.toFixed(4)} g CO₂ saved`;
+    
+    // Determine best method based on lowest energy consumption
+    let bestMethod, bestEnergy, bestSavings, bestCO2, co2Saved;
+    if (data.rule_energy < data.ml_energy) {
+        bestMethod = 'Rule-based Adaptive';
+        bestEnergy = data.rule_energy;
+        bestSavings = data.rule_savings_percent;
+        bestCO2 = data.co2_rule;
+        co2Saved = data.co2_rule_saved;
+    } else {
+        bestMethod = 'ML-Optimized';
+        bestEnergy = data.ml_energy;
+        bestSavings = data.ml_savings_percent;
+        bestCO2 = data.co2_ml;
+        co2Saved = data.co2_ml_saved;
+    }
+    
+    document.getElementById('savingsText').textContent = 
+        `${bestSavings}% energy saved (${bestMethod} - ${bestEnergy}J consumed)`;
+    document.getElementById('savingsValue').textContent = 
+        `CO₂: ${co2Saved.toFixed(4)}g saved (Energy → kWh × 0.716 g/kWh Karnataka grid)`;
     
     // Video players
     const normalVideo = document.getElementById('normalVideo');
@@ -68,6 +102,13 @@ function displayResults(data) {
     normalVideo.src = data.normal_video_url;
     ruleVideo.src = data.rule_video_url;
     mlVideo.src = data.ml_video_url;
+    
+    // CO2 under video players
+    document.getElementById('normalVideoCO2').textContent = `CO₂: ${data.co2_normal.toFixed(4)}g`;
+    document.getElementById('ruleVideoCO2').textContent = `CO₂: ${data.co2_rule.toFixed(4)}g`;
+    document.getElementById('mlVideoCO2').textContent = `CO₂: ${data.co2_ml.toFixed(4)}g`;
+    document.getElementById('ruleVideoCO2Saved').textContent = `✓ ${data.co2_rule_saved.toFixed(4)}g saved`;
+    document.getElementById('mlVideoCO2Saved').textContent = `✓ ${data.co2_ml_saved.toFixed(4)}g saved`;
     
     // Display settings panels for all 3 methods
     displaySettings('normalSettings', data.normal_settings);

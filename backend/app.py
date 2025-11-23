@@ -307,24 +307,27 @@ def upload_video():
         print(f"⚠️ Could not extract metadata: {e}")
         video_info = None
     
-    # Step 1: Analyze video complexity
+    # Step 1: Get input file size
+    input_size_mb = os.path.getsize(input_path) / (1024 * 1024)
+    
+    # Step 2: Analyze video complexity
     print("Analyzing video complexity...")
     complexity = analyze_video_complexity(input_path)
     print(f"Complexity score: {complexity}/10")
     
-    # Step 2: Normal transcoding (standard settings)
+    # Step 3: Normal transcoding (standard settings)
     normal_output = os.path.join(OUTPUT_FOLDER, 'normal_' + file.filename)
     normal_energy, normal_time, normal_settings = transcode_video(
         input_path, normal_output, 'normal', complexity, video_info
     )
     
-    # Step 3: Rule-based Green AI transcoding
+    # Step 4: Rule-based Green AI transcoding
     rule_output = os.path.join(OUTPUT_FOLDER, 'rule_' + file.filename)
     rule_energy, rule_time, rule_settings = transcode_video(
         input_path, rule_output, 'rule', complexity, video_info
     )
     
-    # Step 4: ML-based Green AI transcoding (if available)
+    # Step 5: ML-based Green AI transcoding (if available)
     if ML_AVAILABLE:
         ml_output = os.path.join(OUTPUT_FOLDER, 'ml_' + file.filename)
         ml_energy, ml_time, ml_settings = transcode_video(
@@ -336,7 +339,18 @@ def upload_video():
         ml_energy, ml_time, ml_settings = rule_energy, rule_time, rule_settings.copy()
         ml_settings['mode'] = 'ML (Unavailable - Using Rules)'
     
-    # Step 5: Calculate savings and CO2
+    # Step 6: Get output file sizes and calculate storage savings
+    normal_size_mb = os.path.getsize(normal_output) / (1024 * 1024) if os.path.exists(normal_output) else 0
+    rule_size_mb = os.path.getsize(rule_output) / (1024 * 1024) if os.path.exists(rule_output) else 0
+    ml_size_mb = os.path.getsize(ml_output) / (1024 * 1024) if os.path.exists(ml_output) else 0
+    
+    rule_storage_saved_mb = normal_size_mb - rule_size_mb
+    rule_storage_saved_percent = (rule_storage_saved_mb / normal_size_mb) * 100 if normal_size_mb > 0 else 0
+    
+    ml_storage_saved_mb = normal_size_mb - ml_size_mb
+    ml_storage_saved_percent = (ml_storage_saved_mb / normal_size_mb) * 100 if normal_size_mb > 0 else 0
+    
+    # Step 7: Calculate energy savings and CO2
     rule_savings = normal_energy - rule_energy
     rule_savings_percent = (rule_savings / normal_energy) * 100 if normal_energy > 0 else 0
     
@@ -347,11 +361,20 @@ def upload_video():
     co2_rule = calculate_co2(rule_energy)
     co2_ml = calculate_co2(ml_energy)
     
-    # Step 6: Save to Excel
+    co2_rule_saved = co2_normal - co2_rule
+    co2_ml_saved = co2_normal - co2_ml
+    
+    # Step 8: Save to Excel
     excel_data = {
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'filename': file.filename,
         'complexity': complexity,
+        'input_size_mb': round(input_size_mb, 2),
+        'normal_size_mb': round(normal_size_mb, 2),
+        'rule_size_mb': round(rule_size_mb, 2),
+        'ml_size_mb': round(ml_size_mb, 2),
+        'rule_storage_saved_mb': round(rule_storage_saved_mb, 2),
+        'ml_storage_saved_mb': round(ml_storage_saved_mb, 2),
         'normal_energy': normal_energy,
         'rule_energy': rule_energy,
         'ml_energy': ml_energy,
@@ -359,13 +382,23 @@ def upload_video():
         'ml_savings_percent': round(ml_savings_percent, 2),
         'co2_normal': co2_normal,
         'co2_rule': co2_rule,
-        'co2_ml': co2_ml
+        'co2_ml': co2_ml,
+        'co2_rule_saved': round(co2_rule_saved, 4),
+        'co2_ml_saved': round(co2_ml_saved, 4)
     }
     save_to_excel(excel_data)
     
-    # Step 7: Return results with all 3 comparisons
+    # Step 9: Return results with all 3 comparisons
     return jsonify({
         'complexity': complexity,
+        'input_size_mb': round(input_size_mb, 2),
+        'normal_size_mb': round(normal_size_mb, 2),
+        'rule_size_mb': round(rule_size_mb, 2),
+        'ml_size_mb': round(ml_size_mb, 2),
+        'rule_storage_saved_mb': round(rule_storage_saved_mb, 2),
+        'rule_storage_saved_percent': round(rule_storage_saved_percent, 2),
+        'ml_storage_saved_mb': round(ml_storage_saved_mb, 2),
+        'ml_storage_saved_percent': round(ml_storage_saved_percent, 2),
         'normal_energy': normal_energy,
         'normal_time': normal_time,
         'normal_settings': normal_settings,
@@ -382,6 +415,8 @@ def upload_video():
         'co2_normal': co2_normal,
         'co2_rule': co2_rule,
         'co2_ml': co2_ml,
+        'co2_rule_saved': round(co2_rule_saved, 4),
+        'co2_ml_saved': round(co2_ml_saved, 4),
         'ml_available': ML_AVAILABLE,
         'normal_video_url': f'/outputs/normal_{file.filename}',
         'rule_video_url': f'/outputs/rule_{file.filename}',
@@ -508,24 +543,23 @@ def transcode_video(input_path, output_path, mode, complexity, video_info=None):
         ]
     
     else:
-        # Normal: Standard quality settings (no adaptation)
-        preset = 'medium'
+        # Normal: FFmpeg defaults (industry standard baseline)
+        preset = 'default'  # FFmpeg chooses medium automatically
         crf = '23'
         
         settings = {
             'mode': 'Standard (Fixed)',
-            'preset': preset,
+            'preset': 'default (medium)',
             'crf': crf,
             'codec': 'H.264 (libx264)',
             'threads': 4,
             'optimization': 'None (baseline)',
-            'strategy': 'Fixed medium preset for all videos'
+            'strategy': 'FFmpeg default settings - industry standard'
         }
         
         cmd = [
             'ffmpeg', '-i', input_path,
             '-c:v', 'libx264',
-            '-preset', 'medium',
             '-crf', '23',
             '-threads', '4',
             '-y', output_path

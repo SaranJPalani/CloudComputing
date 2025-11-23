@@ -34,12 +34,18 @@
                     <h3>Normal</h3>
                     <p class="energy-value" id="normalEnergy">0 J</p>
                     <p class="time-value" id="normalTime">0s</p>
+                    <p class="size-value" id="normalSize">0 MB</p>
+                    <p class="co2-value" id="normalCO2">0 g CO₂</p>
                 </div>
 
                 <div class="metric-card green">
                     <h3>Rule-based</h3>
                     <p class="energy-value" id="ruleEnergy">0 J</p>
                     <p class="time-value" id="ruleTime">0s</p>
+                    <p class="size-value" id="ruleSize">0 MB</p>
+                    <p class="storage-saved" id="ruleStorageSaved">+0 MB</p>
+                    <p class="co2-value" id="ruleCO2">0 g CO₂</p>
+                    <p class="co2-saved" id="ruleCO2Saved">0 g CO₂ saved</p>
                     <p class="savings-badge" id="ruleSavings">0%</p>
                 </div>
 
@@ -47,6 +53,10 @@
                     <h3>ML-Optimized</h3>
                     <p class="energy-value" id="mlEnergy">0 J</p>
                     <p class="time-value" id="mlTime">0s</p>
+                    <p class="size-value" id="mlSize">0 MB</p>
+                    <p class="storage-saved" id="mlStorageSaved">+0 MB</p>
+                    <p class="co2-value" id="mlCO2">0 g CO₂</p>
+                    <p class="co2-saved" id="mlCO2Saved">0 g CO₂ saved</p>
                     <p class="savings-badge" id="mlSavings">0%</p>
                 </div>
             </div>
@@ -63,6 +73,7 @@
                     <div class="video-player">
                         <h4>Normal (Baseline)</h4>
                         <video id="normalVideo" controls width="100%"></video>
+                        <p class="video-co2" id="normalVideoCO2">CO₂: 0g</p>
                         <div class="settings-panel" id="normalSettings">
                             <h5>⚙️ Encoding Settings</h5>
                         </div>
@@ -70,6 +81,8 @@
                     <div class="video-player">
                         <h4>Rule-based Adaptive</h4>
                         <video id="ruleVideo" controls width="100%"></video>
+                        <p class="video-co2" id="ruleVideoCO2">CO₂: 0g</p>
+                        <p class="video-co2-saved" id="ruleVideoCO2Saved">0g saved</p>
                         <div class="settings-panel" id="ruleSettings">
                             <h5>⚙️ Encoding Settings</h5>
                         </div>
@@ -77,6 +90,8 @@
                     <div class="video-player">
                         <h4>ML-Optimized</h4>
                         <video id="mlVideo" controls width="100%"></video>
+                        <p class="video-co2" id="mlVideoCO2">CO₂: 0g</p>
+                        <p class="video-co2-saved" id="mlVideoCO2Saved">0g saved</p>
                         <div class="settings-panel" id="mlSettings">
                             <h5>⚙️ Encoding Settings</h5>
                         </div>
