@@ -1,0 +1,43 @@
+# Environment variables (IMPORTANT: Contains API keys!)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Uploads and outputs
+uploads/
+outputs/
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Model files (large binary files)
+*.pkl
+*.h5
+*.pth
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
