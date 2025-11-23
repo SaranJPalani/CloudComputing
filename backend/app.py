@@ -10,6 +10,10 @@ from openpyxl import Workbook, load_workbook
 from datetime import datetime
 import joblib
 import warnings
+import google.generativeai as genai
+import requests
+import json
+import re
 warnings.filterwarnings('ignore')
 
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
@@ -23,9 +27,20 @@ RESULTS_FILE = os.path.join(BASE_DIR, 'outputs', 'results.xlsx')  # Save in outp
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# Carbon intensity (grams CO2 per kWh) - BESCOM Bangalore grid
-# Source: BESCOM weighted average emission factor 2023-24: 0.71 tCO2/MWh
-CARBON_INTENSITY = 710  # g CO2/kWh
+# Carbon intensity (grams CO2 per kWh) - Dynamic based on user location
+# Default: BESCOM Bangalore grid (0.71 tCO2/MWh = 710 g/kWh)
+# Will be updated via /api/carbon-intensity endpoint using Gemini AI
+DEFAULT_CARBON_INTENSITY = 710  # g CO2/kWh (Karnataka, India)
+CARBON_INTENSITY_CACHE = {}  # Session cache: {session_id: {intensity, region, timestamp}}
+
+# Gemini API Configuration
+# Set your API key as environment variable: export GEMINI_API_KEY="your-key-here"
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    print("✅ Gemini API configured")
+else:
+    print("⚠️  GEMINI_API_KEY not set - using default Karnataka carbon intensity")
 
 # EC2 Power Calibration Results (measured on 2025-11-20)
 # t2.micro instance-specific power consumption
@@ -214,14 +229,18 @@ def calculate_energy(duration, cpu_percent):
     energy_joules = power_watts * duration
     return round(energy_joules, 2)
 
-def calculate_co2(energy_joules):
+def calculate_co2(energy_joules, carbon_intensity=None):
     """
     Calculate CO2 emissions from energy consumption
     CO2 (g) = Energy (kWh) × Carbon Intensity (g CO2/kWh)
     """
+    # Use provided carbon intensity or default to Karnataka
+    if carbon_intensity is None:
+        carbon_intensity = DEFAULT_CARBON_INTENSITY
+    
     # Convert Joules to kWh (1 kWh = 3,600,000 J)
     energy_kwh = energy_joules / 3600000
-    co2_grams = energy_kwh * CARBON_INTENSITY
+    co2_grams = energy_kwh * carbon_intensity
     return round(co2_grams, 2)
 
 def save_to_excel(data):
@@ -271,6 +290,141 @@ def save_to_excel(data):
         print(f"❌ Error saving to Excel: {e}")
         import traceback
         traceback.print_exc()
+
+@app.route('/api/carbon-intensity', methods=['POST'])
+def get_carbon_intensity():
+    """
+    Get carbon intensity for a geographic location using Gemini AI
+    Request: {"latitude": 12.9716, "longitude": 77.5946}
+    Response: {"region": "Karnataka, India", "intensity": 710, "source": "gemini"}
+    """
+    try:
+        data = request.get_json()
+        lat = data.get('latitude')
+        lon = data.get('longitude')
+        
+        if not lat or not lon:
+            return jsonify({
+                'region': 'Karnataka, India (default)',
+                'intensity': DEFAULT_CARBON_INTENSITY,
+                'source': 'default',
+                'error': 'Missing coordinates'
+            }), 200
+        
+        # Check if Gemini API is configured
+        if not GEMINI_API_KEY:
+            print("⚠️  Gemini API key not set, using default")
+            return jsonify({
+                'region': 'Karnataka, India (default)',
+                'intensity': DEFAULT_CARBON_INTENSITY,
+                'source': 'default',
+                'error': 'Gemini API not configured'
+            }), 200
+        
+        # Reverse geocode coordinates to get location name using free API
+        try:
+            geocode_url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+            headers = {'User-Agent': 'GreenAI-VideoTranscoder/1.0'}
+            geo_response = requests.get(geocode_url, headers=headers, timeout=5)
+            geo_data = geo_response.json()
+            
+            # Extract region info
+            address = geo_data.get('address', {})
+            state = address.get('state', '')
+            country = address.get('country', '')
+            location_name = f"{state}, {country}" if state and country else f"{country}" if country else "Unknown"
+            
+            print(f"📍 Geocoded: {lat}, {lon} → {location_name}")
+        except Exception as e:
+            print(f"Geocoding failed: {e}")
+            location_name = f"Location at {lat:.4f}, {lon:.4f}"
+        
+        # Call Gemini API with strict prompt
+        try:
+            model = genai.GenerativeModel('gemini-2.0-flash')
+            
+            prompt = f"""You are a precise data lookup assistant for electricity grid carbon intensity.
+
+Location: {location_name}
+Coordinates: {lat}, {lon}
+
+Task: Return the OFFICIAL electricity grid carbon intensity for this region.
+
+Rules:
+1. Use the most recent official data (2023-2024) from government/energy authority sources
+2. Return ONLY a valid JSON object, no markdown, no explanation
+3. Carbon intensity must be in grams CO₂ per kWh (g/kWh)
+4. If exact regional data unavailable, use national grid average
+5. Value must be between 0 and 1500 (realistic range)
+
+Required JSON format:
+{{
+  "region": "[State/Province], [Country]",
+  "intensity": [number],
+  "year": "2023" or "2024",
+  "source": "[Official source name]"
+}}
+
+Example valid response:
+{{
+  "region": "Karnataka, India",
+  "intensity": 710,
+  "year": "2024",
+  "source": "BESCOM Emission Factor 2023-24"
+}}
+
+Return ONLY the JSON object:"""
+            
+            response = model.generate_content(prompt)
+            response_text = response.text.strip()
+            
+            print(f"🤖 Gemini raw response: {response_text}")
+            
+            # Extract JSON from response (remove markdown code blocks if present)
+            json_match = re.search(r'\{[^}]+\}', response_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+                gemini_data = json.loads(json_str)
+                
+                region = gemini_data.get('region', location_name)
+                intensity = gemini_data.get('intensity')
+                source = gemini_data.get('source', 'Gemini AI')
+                year = gemini_data.get('year', '2024')
+                
+                # Validate intensity is reasonable
+                if isinstance(intensity, (int, float)) and 0 <= intensity <= 1500:
+                    print(f"✅ Carbon intensity: {region} = {intensity} g/kWh ({year}, {source})")
+                    return jsonify({
+                        'region': region,
+                        'intensity': float(intensity),
+                        'source': 'gemini',
+                        'year': year,
+                        'data_source': source
+                    }), 200
+                else:
+                    print(f"⚠️  Invalid intensity value: {intensity}")
+                    raise ValueError("Invalid carbon intensity value")
+            else:
+                print(f"⚠️  No JSON found in Gemini response")
+                raise ValueError("No valid JSON in response")
+                
+        except Exception as e:
+            print(f"❌ Gemini API error: {e}")
+            return jsonify({
+                'region': f'{location_name} (fallback)',
+                'intensity': DEFAULT_CARBON_INTENSITY,
+                'source': 'default',
+                'error': f'Gemini error: {str(e)}'
+            }), 200
+            
+    except Exception as e:
+        print(f"❌ Carbon intensity endpoint error: {e}")
+        return jsonify({
+            'region': 'Karnataka, India (default)',
+            'intensity': DEFAULT_CARBON_INTENSITY,
+            'source': 'default',
+            'error': str(e)
+        }), 200
 
 @app.route('/upload', methods=['POST'])
 def upload_video():
@@ -350,21 +504,34 @@ def upload_video():
     ml_storage_saved_mb = normal_size_mb - ml_size_mb
     ml_storage_saved_percent = (ml_storage_saved_mb / normal_size_mb) * 100 if normal_size_mb > 0 else 0
     
-    # Step 7: Calculate energy savings and CO2
+    # Step 7: Get carbon intensity from request (set by frontend after geolocation)
+    carbon_intensity = request.form.get('carbon_intensity')
+    if carbon_intensity:
+        try:
+            carbon_intensity = float(carbon_intensity)
+            print(f"📍 Using carbon intensity: {carbon_intensity} g/kWh")
+        except:
+            carbon_intensity = DEFAULT_CARBON_INTENSITY
+            print(f"⚠️  Invalid carbon intensity, using default: {DEFAULT_CARBON_INTENSITY} g/kWh")
+    else:
+        carbon_intensity = DEFAULT_CARBON_INTENSITY
+        print(f"ℹ️  No carbon intensity provided, using default: {DEFAULT_CARBON_INTENSITY} g/kWh")
+    
+    # Step 8: Calculate energy savings and CO2 with dynamic carbon intensity
     rule_savings = normal_energy - rule_energy
     rule_savings_percent = (rule_savings / normal_energy) * 100 if normal_energy > 0 else 0
     
     ml_savings = normal_energy - ml_energy
     ml_savings_percent = (ml_savings / normal_energy) * 100 if normal_energy > 0 else 0
     
-    co2_normal = calculate_co2(normal_energy)
-    co2_rule = calculate_co2(rule_energy)
-    co2_ml = calculate_co2(ml_energy)
+    co2_normal = calculate_co2(normal_energy, carbon_intensity)
+    co2_rule = calculate_co2(rule_energy, carbon_intensity)
+    co2_ml = calculate_co2(ml_energy, carbon_intensity)
     
     co2_rule_saved = co2_normal - co2_rule
     co2_ml_saved = co2_normal - co2_ml
     
-    # Step 8: Save to Excel
+    # Step 9: Save to Excel
     excel_data = {
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'filename': file.filename,
@@ -388,7 +555,7 @@ def upload_video():
     }
     save_to_excel(excel_data)
     
-    # Step 9: Return results with all 3 comparisons
+    # Step 10: Return results with all 3 comparisons
     return jsonify({
         'complexity': complexity,
         'input_size_mb': round(input_size_mb, 2),

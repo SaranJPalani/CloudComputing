@@ -25,6 +25,58 @@ h1 {
     margin-bottom: 10px;
 }
 
+.location-badge-topright {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 10px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    animation: slideInRight 0.5s ease-out;
+    z-index: 1000;
+    max-width: 280px;
+    text-align: center;
+}
+
+.location-badge-topright strong {
+    font-weight: 600;
+}
+
+@keyframes slideInRight {
+    from { 
+        opacity: 0; 
+        transform: translateX(100px);
+    }
+    to { 
+        opacity: 1; 
+        transform: translateX(0);
+    }
+}
+
+.location-badge {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    text-align: center;
+    margin: 20px 0;
+    font-size: 15px;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    animation: fadeIn 0.5s ease-in;
+}
+
+.location-badge strong {
+    font-weight: 600;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 .upload-section {
     margin: 30px 0;
     display: flex;

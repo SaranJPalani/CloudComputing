@@ -1,6 +1,60 @@
 // Use relative URL so it works both locally and with ngrok
 const API_URL = window.location.origin;
 
+// Global carbon intensity state
+let carbonIntensity = 710; // Default: Karnataka, India
+let carbonRegion = 'Karnataka, India (default)';
+
+// Request geolocation and carbon intensity on page load
+window.addEventListener('DOMContentLoaded', async () => {
+    console.log('🌍 Requesting geolocation...');
+    
+    if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                console.log(`✅ Location: ${lat}, ${lon}`);
+                
+                // Call backend to get carbon intensity
+                try {
+                    const response = await fetch(`${API_URL}/api/carbon-intensity`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ latitude: lat, longitude: lon })
+                    });
+                    
+                    const data = await response.json();
+                    carbonIntensity = data.intensity;
+                    carbonRegion = data.region;
+                    
+                    console.log(`📍 Carbon intensity: ${carbonRegion} = ${carbonIntensity} g/kWh`);
+                    updateLocationDisplay(carbonRegion, carbonIntensity, data.source);
+                } catch (error) {
+                    console.error('Carbon intensity API error:', error);
+                    updateLocationDisplay(carbonRegion, carbonIntensity, 'default');
+                }
+            },
+            (error) => {
+                console.log(`❌ Geolocation denied: ${error.message}`);
+                updateLocationDisplay(carbonRegion, carbonIntensity, 'default');
+            }
+        );
+    } else {
+        console.log('❌ Geolocation not supported');
+        updateLocationDisplay(carbonRegion, carbonIntensity, 'default');
+    }
+});
+
+function updateLocationDisplay(region, intensity, source) {
+    const locationElement = document.getElementById('carbonLocation');
+    if (locationElement) {
+        const sourceIcon = source === 'gemini' ? '🤖' : '📍';
+        locationElement.innerHTML = `${sourceIcon} <strong>${region}</strong> - ${intensity} g CO₂/kWh`;
+        locationElement.style.display = 'block';
+    }
+}
+
 async function uploadVideo() {
     const fileInput = document.getElementById('videoInput');
     const file = fileInput.files[0];
@@ -12,6 +66,7 @@ async function uploadVideo() {
     
     const formData = new FormData();
     formData.append('video', file);
+    formData.append('carbon_intensity', carbonIntensity); // Include carbon intensity
     
     // Show loading
     document.getElementById('loading').style.display = 'block';

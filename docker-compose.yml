@@ -14,4 +14,5 @@ services:
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}  # Pass from .env file or environment
     restart: unless-stopped

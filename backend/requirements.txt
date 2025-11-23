@@ -5,3 +5,5 @@ opencv-python-headless
 openpyxl
 scikit-learn
 joblib
+google-generativeai
+requests
