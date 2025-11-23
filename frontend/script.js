@@ -42,27 +42,37 @@ function displayResults(data) {
     else complexityLabel = 'High (Complex video)';
     document.getElementById('complexityLabel').textContent = complexityLabel;
     
-    // Energy metrics
+    // Energy metrics for all 3 methods
     document.getElementById('normalEnergy').textContent = `${data.normal_energy} J`;
-    document.getElementById('normalTime').textContent = `${data.normal_time} seconds`;
+    document.getElementById('normalTime').textContent = `${data.normal_time}s`;
     
-    document.getElementById('greenEnergy').textContent = `${data.green_energy} J`;
-    document.getElementById('greenTime').textContent = `${data.green_time} seconds`;
+    document.getElementById('ruleEnergy').textContent = `${data.rule_energy} J`;
+    document.getElementById('ruleTime').textContent = `${data.rule_time}s`;
+    document.getElementById('ruleSavings').textContent = `${data.rule_savings_percent}% saved`;
     
-    // Savings
-    document.getElementById('savingsText').textContent = `${data.savings_percent}% energy reduction`;
-    document.getElementById('savingsValue').textContent = `${data.savings} Joules saved`;
+    document.getElementById('mlEnergy').textContent = `${data.ml_energy} J`;
+    document.getElementById('mlTime').textContent = `${data.ml_time}s`;
+    document.getElementById('mlSavings').textContent = `${data.ml_savings_percent}% saved`;
+    
+    // Savings summary (use ML if available, else rule-based)
+    const bestSavings = data.ml_available ? data.ml_savings_percent : data.rule_savings_percent;
+    const bestMethod = data.ml_available ? 'ML-Optimized' : 'Rule-based';
+    document.getElementById('savingsText').textContent = `${bestSavings}% energy reduction (${bestMethod})`;
+    document.getElementById('savingsValue').textContent = `Best: ${Math.max(data.rule_savings, data.ml_savings)} Joules saved`;
     
     // Video players
     const normalVideo = document.getElementById('normalVideo');
-    const greenVideo = document.getElementById('greenVideo');
+    const ruleVideo = document.getElementById('ruleVideo');
+    const mlVideo = document.getElementById('mlVideo');
     
     normalVideo.src = data.normal_video_url;
-    greenVideo.src = data.green_video_url;
+    ruleVideo.src = data.rule_video_url;
+    mlVideo.src = data.ml_video_url;
     
-    // Display settings panels
+    // Display settings panels for all 3 methods
     displaySettings('normalSettings', data.normal_settings);
-    displaySettings('greenSettings', data.green_settings);
+    displaySettings('ruleSettings', data.rule_settings);
+    displaySettings('mlSettings', data.ml_settings);
     
     document.getElementById('results').style.display = 'block';
 }

@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <h1>Green AI Video Transcoding</h1>
-        <p>Compare energy consumption: Normal vs Green AI optimization</p>
+        <p>Compare 3 approaches: Normal vs Rule-based vs ML-optimized</p>
         
         <div class="upload-section">
             <input type="file" id="videoInput" accept="video/*">
@@ -31,15 +31,23 @@
             
             <div class="comparison">
                 <div class="metric-card">
-                    <h3>Normal Transcoding</h3>
+                    <h3>Normal</h3>
                     <p class="energy-value" id="normalEnergy">0 J</p>
-                    <p class="time-value" id="normalTime">0 seconds</p>
+                    <p class="time-value" id="normalTime">0s</p>
                 </div>
 
                 <div class="metric-card green">
-                    <h3>Green AI Transcoding</h3>
-                    <p class="energy-value" id="greenEnergy">0 J</p>
-                    <p class="time-value" id="greenTime">0 seconds</p>
+                    <h3>Rule-based</h3>
+                    <p class="energy-value" id="ruleEnergy">0 J</p>
+                    <p class="time-value" id="ruleTime">0s</p>
+                    <p class="savings-badge" id="ruleSavings">0%</p>
+                </div>
+
+                <div class="metric-card ml">
+                    <h3>ML-Optimized</h3>
+                    <p class="energy-value" id="mlEnergy">0 J</p>
+                    <p class="time-value" id="mlTime">0s</p>
+                    <p class="savings-badge" id="mlSavings">0%</p>
                 </div>
             </div>
 
@@ -53,19 +61,24 @@
                 <h3>Compare Videos</h3>
                 <div class="videos">
                     <div class="video-player">
-                        <h4>Normal</h4>
+                        <h4>Normal (Baseline)</h4>
                         <video id="normalVideo" controls width="100%"></video>
                         <div class="settings-panel" id="normalSettings">
                             <h5>⚙️ Encoding Settings</h5>
-                            <!-- Settings will be populated by JavaScript -->
                         </div>
                     </div>
                     <div class="video-player">
-                        <h4>Green AI</h4>
-                        <video id="greenVideo" controls width="100%"></video>
-                        <div class="settings-panel" id="greenSettings">
+                        <h4>Rule-based Adaptive</h4>
+                        <video id="ruleVideo" controls width="100%"></video>
+                        <div class="settings-panel" id="ruleSettings">
                             <h5>⚙️ Encoding Settings</h5>
-                            <!-- Settings will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    <div class="video-player">
+                        <h4>ML-Optimized</h4>
+                        <video id="mlVideo" controls width="100%"></video>
+                        <div class="settings-panel" id="mlSettings">
+                            <h5>⚙️ Encoding Settings</h5>
                         </div>
                     </div>
                 </div>

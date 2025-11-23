@@ -156,7 +156,7 @@ Successfully processed 1 files; Failed processing 0 files
 
 ```powershell
 # Replace XX.XXX.XXX.XXX with YOUR instance's Public IPv4 address
-ssh -i C:\Users\saran\.ssh\green-ai-key.pem ubuntu@13.203.204.19
+ssh -i C:\Users\saran\.ssh\green-ai-key.pem ubuntu@3.110.171.248
 ```
 
 **First time connecting, you'll see:**
@@ -596,13 +596,13 @@ du -sh ~/badal/*
 cd C:\Users\saran\Downloads\badal
 
 # Upload only backend changes
-scp -i C:\Users\saran\.ssh\green-ai-key.pem -r backend ubuntu@3.110.115.73:~/badal/
+scp -i C:\Users\saran\.ssh\green-ai-key.pem -r backend ubuntu@3.110.115.248:~/badal/
 
 # Or upload frontend changes
 scp -i C:\Users\saran\.ssh\green-ai-key.pem -r frontend ubuntu@XX.XXX.XXX.XXX:~/badal/
 
 # Or upload everything
-scp -i C:\Users\saran\.ssh\green-ai-key.pem -r . ubuntu@XX.XXX.XXX.XXX:~/badal/
+scp -i C:\Users\saran\.ssh\green-ai-key.pem -r . ubuntu@3.110.171.248:~/badal/
 ```
 
 ### Step 2: Rebuild on EC2

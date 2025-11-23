@@ -8,6 +8,9 @@ import cv2
 import numpy as np
 from openpyxl import Workbook, load_workbook
 from datetime import datetime
+import joblib
+import warnings
+warnings.filterwarnings('ignore')
 
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 CORS(app)
@@ -29,44 +32,95 @@ CARBON_INTENSITY = 710  # g CO2/kWh
 P_IDLE_W = 0.016  # Watts - idle power consumption
 P_MAX_W = 28.000  # Watts - max load power consumption
 
+# Load ML models at startup
+try:
+    CRF_MODEL = joblib.load(os.path.join(BASE_DIR, 'crf_model.pkl'))
+    PRESET_MODEL = joblib.load(os.path.join(BASE_DIR, 'preset_model.pkl'))
+    print("✅ ML models loaded successfully!")
+    ML_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️  ML models not found: {e}")
+    print("   Falling back to rule-based optimization only")
+    CRF_MODEL = None
+    PRESET_MODEL = None
+    ML_AVAILABLE = False
+
 def predict_optimal_preset(complexity, width, height, fps, size_mb):
     """
     Determine optimal FFmpeg preset based on video complexity
     Uses rule-based approach for reliable, interpretable results
     
-    Strategy: Lower complexity → faster preset (save energy without quality loss)
-             Higher complexity → balanced preset (maintain quality)
+    Strategy: Optimized for lifecycle energy (encoding + storage + playback)
+             Balances encoding speed with file size for long-term efficiency
     """
-    # Simple, proven logic based on complexity analysis
+    # Lifecycle-optimized preset selection
     if complexity < 3.5:
         # Low complexity (talking heads, static scenes)
-        return 'ultrafast'
+        return 'faster'  # Quick encode, good compression
     elif complexity < 7.0:
         # Medium complexity (normal videos)
-        return 'superfast'
+        return 'fast'  # Balanced speed and file size
     else:
         # High complexity (action, sports)
-        return 'veryfast'
-    
-    presets = ['ultrafast', 'superfast', 'veryfast', 'fast', 'medium']
-    return presets[preset_index]
+        return 'medium'  # Preserve quality, minimize file size
 
-def analyze_video_complexity(video_path):
+def predict_ml_settings(video_path):
     """
-    Analyze video complexity using OpenCV
-    Returns a complexity score from 0-10 based on:
-    - Edge density (how detailed frames are)
-    - Motion between frames
+    Use ML models to predict optimal CRF and preset
+    Returns: (crf, preset) or None if ML not available
+    """
+    if not ML_AVAILABLE:
+        return None
+    
+    try:
+        # Extract features
+        features = extract_ml_features(video_path)
+        
+        # Prepare feature vector in correct order
+        feature_vector = [[
+            features['edge_density'],
+            features['motion_score'],
+            features['brightness'],
+            features['color_variance'],
+            features['resolution'],
+            features['fps'],
+            features['duration']
+        ]]
+        
+        # Predict CRF and preset
+        predicted_crf = int(CRF_MODEL.predict(feature_vector)[0])
+        predicted_preset = PRESET_MODEL.predict(feature_vector)[0]
+        
+        print(f"🤖 ML Prediction: CRF {predicted_crf}, Preset {predicted_preset}")
+        
+        return predicted_crf, predicted_preset
+    
+    except Exception as e:
+        print(f"ML prediction error: {e}")
+        return None
+
+def extract_ml_features(video_path):
+    """
+    Extract ALL 7 features needed for ML model prediction
+    Returns dict with: edge_density, motion_score, brightness, color_variance, resolution, fps, duration
     """
     try:
         cap = cv2.VideoCapture(video_path)
         
-        # Sample frames (every 10th frame to save processing time)
+        # Get video properties
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        sample_rate = max(1, frame_count // 20)  # Sample ~20 frames max
+        duration = frame_count / fps if fps > 0 else 0
+        
+        # Sample 1 frame per second (fast sampling)
+        sample_interval = int(fps) if fps > 0 else 1
         
         edge_scores = []
         motion_scores = []
+        brightness_scores = []
+        color_variances = []
         prev_gray = None
         
         frame_idx = 0
@@ -75,50 +129,79 @@ def analyze_video_complexity(video_path):
             if not ret:
                 break
             
-            # Only process sampled frames
-            if frame_idx % sample_rate == 0:
-                # Convert to grayscale for analysis
+            # Only process sampled frames (1 per second)
+            if frame_idx % sample_interval == 0:
+                # Convert to grayscale
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 
-                # 1. Edge Detection (Canny) - measures detail/complexity
-                edges = cv2.Canny(gray, 50, 150)
-                edge_density = np.count_nonzero(edges) / edges.size
-                edge_scores.append(edge_density)
+                # Feature 1: Edge density
+                edges = cv2.Canny(gray, 100, 200)
+                edge_scores.append(np.mean(edges) / 255.0)
                 
-                # 2. Motion Detection - compare with previous frame
+                # Feature 2: Motion (frame difference)
                 if prev_gray is not None:
-                    # Calculate absolute difference between frames
                     diff = cv2.absdiff(gray, prev_gray)
-                    motion_density = np.mean(diff) / 255.0
-                    motion_scores.append(motion_density)
+                    motion_scores.append(np.mean(diff) / 255.0)
+                prev_gray = gray.copy()
                 
-                prev_gray = gray
+                # Feature 3: Brightness
+                brightness_scores.append(np.mean(gray) / 255.0)
+                
+                # Feature 4: Color variance
+                color_variances.append(np.std(frame) / 255.0)
             
             frame_idx += 1
         
         cap.release()
         
-        # Calculate average scores
-        avg_edge = np.mean(edge_scores) if edge_scores else 0
-        avg_motion = np.mean(motion_scores) if motion_scores else 0
+        # Calculate features
+        features = {
+            'edge_density': np.mean(edge_scores) if edge_scores else 0,
+            'motion_score': np.mean(motion_scores) if motion_scores else 0,
+            'brightness': np.mean(brightness_scores) if brightness_scores else 0,
+            'color_variance': np.mean(color_variances) if color_variances else 0,
+            'resolution': width * height,
+            'fps': fps,
+            'duration': duration
+        }
         
-        # Normalize to 0-10 scale with better calibration
-        # Typical edge density: 0.05-0.15, motion: 0.01-0.10
-        edge_normalized = min(10, (avg_edge / 0.15) * 10)
-        motion_normalized = min(10, (avg_motion / 0.10) * 10)
+        return features
+    
+    except Exception as e:
+        print(f"Error extracting features: {e}")
+        # Return default features
+        return {
+            'edge_density': 0.05,
+            'motion_score': 0.05,
+            'brightness': 0.5,
+            'color_variance': 0.2,
+            'resolution': 1920 * 1080,
+            'fps': 30,
+            'duration': 30
+        }
+
+def analyze_video_complexity(video_path):
+    """
+    Analyze video complexity using OpenCV
+    Returns a complexity score from 0-10 based on edge density and motion
+    """
+    try:
+        features = extract_ml_features(video_path)
         
-        # Complexity score: weighted combination
-        # Edge contributes 60%, motion contributes 40%
+        # Calculate simple complexity score for display
+        edge_normalized = min(10, (features['edge_density'] / 0.15) * 10)
+        motion_normalized = min(10, (features['motion_score'] / 0.10) * 10)
+        
         complexity = (edge_normalized * 0.6 + motion_normalized * 0.4)
-        complexity = min(10, max(0, complexity))  # Clamp to 0-10
+        complexity = min(10, max(0, complexity))
         
-        print(f"Debug - Edge: {avg_edge:.4f} ({edge_normalized:.2f}/10), Motion: {avg_motion:.4f} ({motion_normalized:.2f}/10)")
+        print(f"Debug - Edge: {features['edge_density']:.4f}, Motion: {features['motion_score']:.4f}, Complexity: {complexity:.2f}/10")
         
         return round(complexity, 2)
     
     except Exception as e:
         print(f"Error analyzing video: {e}")
-        return 5.0  # Default to medium complexity if analysis fails
+        return 5.0
 
 def calculate_energy(duration, cpu_percent):
     """
@@ -160,8 +243,9 @@ def save_to_excel(data):
             ws = wb.active
             ws.append([
                 'Timestamp', 'Filename', 'Complexity', 
-                'Normal_Energy_J', 'Green_Energy_J', 'Savings_%',
-                'CO2_Normal_g', 'CO2_Green_g', 'CO2_Saved_g'
+                'Normal_Energy_J', 'Rule_Energy_J', 'ML_Energy_J',
+                'Rule_Savings_%', 'ML_Savings_%',
+                'CO2_Normal_g', 'CO2_Rule_g', 'CO2_ML_g'
             ])
         
         # Append new data
@@ -170,11 +254,13 @@ def save_to_excel(data):
             data['filename'],
             data['complexity'],
             data['normal_energy'],
-            data['green_energy'],
-            data['savings_percent'],
+            data['rule_energy'],
+            data['ml_energy'],
+            data['rule_savings_percent'],
+            data['ml_savings_percent'],
             data['co2_normal'],
-            data['co2_green'],
-            data['co2_saved']
+            data['co2_rule'],
+            data['co2_ml']
         ])
         
         # Save workbook
@@ -232,57 +318,82 @@ def upload_video():
         input_path, normal_output, 'normal', complexity, video_info
     )
     
-    # Step 3: Green AI transcoding (ML-adaptive)
-    green_output = os.path.join(OUTPUT_FOLDER, 'green_' + file.filename)
-    green_energy, green_time, green_settings = transcode_video(
-        input_path, green_output, 'green', complexity, video_info
+    # Step 3: Rule-based Green AI transcoding
+    rule_output = os.path.join(OUTPUT_FOLDER, 'rule_' + file.filename)
+    rule_energy, rule_time, rule_settings = transcode_video(
+        input_path, rule_output, 'rule', complexity, video_info
     )
     
-    # Step 4: Calculate savings and CO2
-    savings = normal_energy - green_energy
-    savings_percent = (savings / normal_energy) * 100 if normal_energy > 0 else 0
+    # Step 4: ML-based Green AI transcoding (if available)
+    if ML_AVAILABLE:
+        ml_output = os.path.join(OUTPUT_FOLDER, 'ml_' + file.filename)
+        ml_energy, ml_time, ml_settings = transcode_video(
+            input_path, ml_output, 'ml', complexity, video_info
+        )
+    else:
+        # Fallback to rule-based if ML not available
+        ml_output = rule_output
+        ml_energy, ml_time, ml_settings = rule_energy, rule_time, rule_settings.copy()
+        ml_settings['mode'] = 'ML (Unavailable - Using Rules)'
+    
+    # Step 5: Calculate savings and CO2
+    rule_savings = normal_energy - rule_energy
+    rule_savings_percent = (rule_savings / normal_energy) * 100 if normal_energy > 0 else 0
+    
+    ml_savings = normal_energy - ml_energy
+    ml_savings_percent = (ml_savings / normal_energy) * 100 if normal_energy > 0 else 0
     
     co2_normal = calculate_co2(normal_energy)
-    co2_green = calculate_co2(green_energy)
-    co2_saved = co2_normal - co2_green
+    co2_rule = calculate_co2(rule_energy)
+    co2_ml = calculate_co2(ml_energy)
     
-    # Step 5: Save to Excel
+    # Step 6: Save to Excel
     excel_data = {
         'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'filename': file.filename,
         'complexity': complexity,
         'normal_energy': normal_energy,
-        'green_energy': green_energy,
-        'savings_percent': round(savings_percent, 2),
+        'rule_energy': rule_energy,
+        'ml_energy': ml_energy,
+        'rule_savings_percent': round(rule_savings_percent, 2),
+        'ml_savings_percent': round(ml_savings_percent, 2),
         'co2_normal': co2_normal,
-        'co2_green': co2_green,
-        'co2_saved': round(co2_saved, 2)
+        'co2_rule': co2_rule,
+        'co2_ml': co2_ml
     }
     save_to_excel(excel_data)
     
-    # Step 6: Return results with video URLs and settings
+    # Step 7: Return results with all 3 comparisons
     return jsonify({
         'complexity': complexity,
         'normal_energy': normal_energy,
         'normal_time': normal_time,
         'normal_settings': normal_settings,
-        'green_energy': green_energy,
-        'green_time': green_time,
-        'green_settings': green_settings,
-        'savings': round(savings, 2),
-        'savings_percent': round(savings_percent, 2),
+        'rule_energy': rule_energy,
+        'rule_time': rule_time,
+        'rule_settings': rule_settings,
+        'ml_energy': ml_energy,
+        'ml_time': ml_time,
+        'ml_settings': ml_settings,
+        'rule_savings': round(rule_savings, 2),
+        'rule_savings_percent': round(rule_savings_percent, 2),
+        'ml_savings': round(ml_savings, 2),
+        'ml_savings_percent': round(ml_savings_percent, 2),
         'co2_normal': co2_normal,
-        'co2_green': co2_green,
-        'co2_saved': round(co2_saved, 2),
+        'co2_rule': co2_rule,
+        'co2_ml': co2_ml,
+        'ml_available': ML_AVAILABLE,
         'normal_video_url': f'/outputs/normal_{file.filename}',
-        'green_video_url': f'/outputs/green_{file.filename}'
+        'rule_video_url': f'/outputs/rule_{file.filename}',
+        'ml_video_url': f'/outputs/ml_{file.filename}'
     })
 
 def transcode_video(input_path, output_path, mode, complexity, video_info=None):
     """
     Transcode video with mode-specific settings
-    Mode 'green': Uses ML-based adaptive settings
-    Mode 'normal': Uses standard quality settings
+    Mode 'normal': Uses standard quality settings (baseline)
+    Mode 'rule': Uses rule-based adaptive settings
+    Mode 'ml': Uses ML-predicted settings
     Returns: (energy, duration, settings_dict)
     """
     cpu_percentages = []
@@ -325,8 +436,46 @@ def transcode_video(input_path, output_path, mode, complexity, video_info=None):
     
     settings = {}  # Track all encoding settings
     
-    if mode == 'green':
-        # Green AI: Rule-based adaptive preset AND CRF selection
+    if mode == 'ml':
+        # ML-based: Use trained Random Forest models to predict optimal settings
+        ml_prediction = predict_ml_settings(input_path)
+        
+        if ml_prediction:
+            crf, preset = ml_prediction
+            crf = str(crf)
+        else:
+            # Fallback to rule-based if ML fails
+            preset = predict_optimal_preset(complexity, width, height, fps, size_mb)
+            if complexity < 3.5:
+                crf = '28'
+            elif complexity < 7.0:
+                crf = '26'
+            else:
+                crf = '24'
+        
+        settings = {
+            'mode': 'ML-Optimized (Random Forest)',
+            'preset': preset,
+            'crf': crf,
+            'codec': 'H.264 (libx264)',
+            'threads': 4,
+            'optimization': f'ML-predicted: {preset} preset + CRF {crf} based on 7 features from 192 training videos',
+            'strategy': 'Machine Learning model trained on optimal encoding settings for quality-size tradeoff'
+        }
+        
+        print(f"🤖 ML Mode: preset={preset}, CRF={crf}")
+        
+        cmd = [
+            'ffmpeg', '-i', input_path,
+            '-c:v', 'libx264',
+            '-preset', preset,
+            '-crf', crf,
+            '-threads', '4',
+            '-y', output_path
+        ]
+    
+    elif mode == 'rule':
+        # Rule-based: Adaptive preset AND CRF selection based on complexity
         preset = predict_optimal_preset(complexity, width, height, fps, size_mb)
         
         # Adaptive CRF: simpler videos can use higher CRF (more compression, smaller file)
@@ -338,16 +487,16 @@ def transcode_video(input_path, output_path, mode, complexity, video_info=None):
             crf = '24'  # High complexity: preserve quality
         
         settings = {
-            'mode': 'Green AI (Adaptive)',
+            'mode': 'Rule-Based Adaptive',
             'preset': preset,
             'crf': crf,
             'codec': 'H.264 (libx264)',
             'threads': 4,
-            'optimization': f'Complexity-based: {preset} preset + CRF {crf} for complexity {complexity:.1f}/10',
-            'strategy': 'Faster encoding + higher compression for simple content = energy + bandwidth savings'
+            'optimization': f'Rule-based: {preset} preset + CRF {crf} for complexity {complexity:.1f}/10',
+            'strategy': 'Adaptive encoding based on edge detection + motion analysis'
         }
         
-        print(f"🌱 Green AI: complexity={complexity:.1f} → preset={preset}, CRF={crf}")
+        print(f"📏 Rule-based: complexity={complexity:.1f} → preset={preset}, CRF={crf}")
         
         cmd = [
             'ffmpeg', '-i', input_path,
@@ -357,6 +506,7 @@ def transcode_video(input_path, output_path, mode, complexity, video_info=None):
             '-threads', '4',
             '-y', output_path
         ]
+    
     else:
         # Normal: Standard quality settings (no adaptation)
         preset = 'medium'

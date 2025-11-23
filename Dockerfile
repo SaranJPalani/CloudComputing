@@ -17,6 +17,10 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 
+# Copy ML models (place these files in project root before building)
+# If missing, app will automatically use rule-based fallback
+COPY crf_model.pkl preset_model.pkl ./ 
+
 # Create upload/output directories
 RUN mkdir -p uploads outputs
 

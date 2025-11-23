@@ -22,25 +22,44 @@ pip-delete-this-directory.txt
 README.md
 DEPLOYMENT-GUIDE.md
 AWS-DEPLOYMENT-GUIDE.md
-ML-FEATURES.md
-*.md
+EC2-POWER-CALIBRATION.md
+RESEARCH_COMPARISON.md
+PAPERS_TABLE.md
 
 # Kubernetes files (not using in Docker)
 k8s-deployment.yaml
 
+# Jupyter notebooks (training done locally)
+*.ipynb
+.ipynb_checkpoints/
 
-# Generated runtime files
-uploads/*
-outputs/*
+# Training scripts and data (not needed in production)
+calibrate_ec2_power.py
+train_model.py
+local_video_training_generator.ipynb
+training_data_local.csv
 
-# Video files (too large, generated at runtime)
+# Training videos folder (too large)
+training_videos/
+
+# Generated runtime files (but keep uploads/outputs folders structure)
+uploads/*.mp4
+uploads/*.avi
+uploads/*.mov
+uploads/*.mkv
+outputs/*.mp4
+outputs/*.avi
+outputs/*.mov
+outputs/*.mkv
+
+# Video files anywhere (too large, generated at runtime)
 *.mp4
 *.avi
 *.mov
 *.mkv
 
-# Excel results (generated at runtime)
-*.xlsx
+# Excel results generated at runtime (but keep folder structure)
+outputs/*.xlsx
 
 # IDE files
 .vscode/
@@ -51,3 +70,11 @@ outputs/*
 # OS files
 .DS_Store
 Thumbs.db
+
+# ========================================
+# IMPORTANT: These files MUST be included
+# ========================================
+# !crf_model.pkl          - ML model for CRF prediction
+# !preset_model.pkl       - ML model for preset prediction  
+# !training_data_local.csv - Training reference data
+# These are NOT ignored (no entry = included by default)
