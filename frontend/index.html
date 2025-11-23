@@ -16,7 +16,7 @@
         <p>Compare 3 approaches: Normal vs Rule-based vs ML-optimized</p>
         
         <div class="upload-section">
-            <input type="file" id="videoInput" accept="video/*">
+            <input type="file" id="videoInput" accept="video/*" onchange="handleFileSelect(event)">
             <button onclick="uploadVideo()">Upload & Transcode</button>
         </div>
 

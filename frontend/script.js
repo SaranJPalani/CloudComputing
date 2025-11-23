@@ -55,7 +55,23 @@ function updateLocationDisplay(region, intensity, source) {
     }
 }
 
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
+        console.log(`📁 File selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+    }
+}
+
+let isUploading = false; // Prevent double-submit
+
 async function uploadVideo() {
+    console.log('🚀 uploadVideo() called, isUploading:', isUploading);
+    
+    if (isUploading) {
+        console.warn('⚠️ Upload already in progress, ignoring duplicate call');
+        return;
+    }
+    
     const fileInput = document.getElementById('videoInput');
     const file = fileInput.files[0];
     
@@ -64,6 +80,9 @@ async function uploadVideo() {
         return;
     }
     
+    isUploading = true;
+    console.log(`📤 Starting upload: ${file.name}`);
+    
     const formData = new FormData();
     formData.append('video', file);
     formData.append('carbon_intensity', carbonIntensity); // Include carbon intensity
@@ -71,19 +90,88 @@ async function uploadVideo() {
     // Show loading
     document.getElementById('loading').style.display = 'block';
     document.getElementById('results').style.display = 'none';
+    updateLoadingMessage('Uploading video...');
     
     try {
+        // Submit video - server returns immediately with job ID
         const response = await fetch(`${API_URL}/upload`, {
             method: 'POST',
             body: formData
         });
         
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+        }
+        
         const data = await response.json();
-        displayResults(data);
+        const jobId = data.job_id;
+        console.log(`✅ Job created: ${jobId}`);
+        
+        // Poll for completion
+        await pollJobStatus(jobId);
+        
     } catch (error) {
+        console.error('❌ Upload error:', error);
         alert('Error: ' + error.message);
-    } finally {
         document.getElementById('loading').style.display = 'none';
+        isUploading = false;
+    }
+}
+
+async function pollJobStatus(jobId) {
+    const pollInterval = 2000; // Poll every 2 seconds
+    
+    while (true) {
+        try {
+            const response = await fetch(`${API_URL}/status/${jobId}`);
+            
+            if (!response.ok) {
+                throw new Error(`Status check failed: ${response.status}`);
+            }
+            
+            const status = await response.json();
+            console.log(`📊 Job progress: ${status.progress}%`);
+            
+            // Update loading message based on progress
+            if (status.progress < 20) {
+                updateLoadingMessage('Analyzing video complexity...');
+            } else if (status.progress < 50) {
+                updateLoadingMessage('Processing normal mode...');
+            } else if (status.progress < 80) {
+                updateLoadingMessage('Processing rule-based mode...');
+            } else if (status.progress < 100) {
+                updateLoadingMessage('Processing ML mode...');
+            }
+            
+            if (status.status === 'completed') {
+                console.log('✅ Job completed, displaying results');
+                displayResults(status.result);
+                document.getElementById('loading').style.display = 'none';
+                isUploading = false;
+                break;
+            } else if (status.status === 'failed') {
+                throw new Error(status.error || 'Processing failed');
+            }
+            
+            // Wait before next poll
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+            
+        } catch (error) {
+            console.error('❌ Polling error:', error);
+            alert('Error checking status: ' + error.message);
+            document.getElementById('loading').style.display = 'none';
+            isUploading = false;
+            break;
+        }
+    }
+}
+
+function updateLoadingMessage(message) {
+    const loadingDiv = document.getElementById('loading');
+    // Update the loading message text (assumes you have a <p> inside loading div)
+    const messageEl = loadingDiv.querySelector('p');
+    if (messageEl) {
+        messageEl.textContent = message;
     }
 }
 

@@ -260,7 +260,7 @@ exit
 
 **Then SSH back in:**
 ```powershell
-ssh -i C:\Users\saran\.ssh\green-ai-key.pem ubuntu@13.233.131.99
+ssh -i C:\Users\saran\.ssh\green-ai-key.pem ubuntu@3.108.254.61
 ```
 
 ---
@@ -602,7 +602,7 @@ scp -i C:\Users\saran\.ssh\green-ai-key.pem -r backend ubuntu@3.110.115.248:~/ba
 scp -i C:\Users\saran\.ssh\green-ai-key.pem -r frontend ubuntu@XX.XXX.XXX.XXX:~/badal/
 
 # Or upload everything
-scp -i C:\Users\saran\.ssh\green-ai-key.pem -r . ubuntu@13.203.159.48:~/badal/
+scp -i C:\Users\saran\.ssh\green-ai-key.pem -r . ubuntu@3.108.254.61:~/badal/
 ```
 
 ### Step 2: Rebuild on EC2
@@ -882,3 +882,7 @@ You've successfully:
 
 **Made with ❤️ for your case study project**
 **Good luck with your presentation!** 🎓
+
+
+cd C:\Users\saran\Downloads\badal
+scp -i C:\Users\saran\.ssh\green-ai-key.pem -r backend frontend .env docker-compose.yml Dockerfile ubuntu@3.108.254.61:~/badal/

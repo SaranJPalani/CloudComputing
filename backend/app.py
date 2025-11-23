@@ -14,10 +14,15 @@ import google.generativeai as genai
 import requests
 import json
 import re
+import threading
+import uuid
 warnings.filterwarnings('ignore')
 
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
 CORS(app)
+
+# Job queue for background processing
+jobs = {}  # {job_id: {status, progress, result, error}}
 
 # Use parent directory for uploads/outputs
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -437,158 +442,211 @@ def upload_video():
     
     file = request.files['video']
     print(f"📹 File received: {file.filename}")
+    
+    # Generate unique job ID
+    job_id = str(uuid.uuid4())
+    
+    # Save file
     input_path = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(input_path)
     print(f"💾 File saved to: {input_path}")
     
-    # Extract video metadata
+    # Get carbon intensity from request
+    carbon_intensity = request.form.get('carbon_intensity', DEFAULT_CARBON_INTENSITY)
     try:
-        cap = cv2.VideoCapture(input_path)
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
-        cap.release()
-        size_mb = os.path.getsize(input_path) / (1024 * 1024)
-        
-        video_info = {
-            'width': width,
-            'height': height,
-            'fps': fps,
-            'size_mb': size_mb
-        }
-        print(f"📊 Video: {width}x{height} @ {fps}fps, {size_mb:.2f}MB")
-    except Exception as e:
-        print(f"⚠️ Could not extract metadata: {e}")
-        video_info = None
-    
-    # Step 1: Get input file size
-    input_size_mb = os.path.getsize(input_path) / (1024 * 1024)
-    
-    # Step 2: Analyze video complexity
-    print("Analyzing video complexity...")
-    complexity = analyze_video_complexity(input_path)
-    print(f"Complexity score: {complexity}/10")
-    
-    # Step 3: Normal transcoding (standard settings)
-    normal_output = os.path.join(OUTPUT_FOLDER, 'normal_' + file.filename)
-    normal_energy, normal_time, normal_settings = transcode_video(
-        input_path, normal_output, 'normal', complexity, video_info
-    )
-    
-    # Step 4: Rule-based Green AI transcoding
-    rule_output = os.path.join(OUTPUT_FOLDER, 'rule_' + file.filename)
-    rule_energy, rule_time, rule_settings = transcode_video(
-        input_path, rule_output, 'rule', complexity, video_info
-    )
-    
-    # Step 5: ML-based Green AI transcoding (if available)
-    if ML_AVAILABLE:
-        ml_output = os.path.join(OUTPUT_FOLDER, 'ml_' + file.filename)
-        ml_energy, ml_time, ml_settings = transcode_video(
-            input_path, ml_output, 'ml', complexity, video_info
-        )
-    else:
-        # Fallback to rule-based if ML not available
-        ml_output = rule_output
-        ml_energy, ml_time, ml_settings = rule_energy, rule_time, rule_settings.copy()
-        ml_settings['mode'] = 'ML (Unavailable - Using Rules)'
-    
-    # Step 6: Get output file sizes and calculate storage savings
-    normal_size_mb = os.path.getsize(normal_output) / (1024 * 1024) if os.path.exists(normal_output) else 0
-    rule_size_mb = os.path.getsize(rule_output) / (1024 * 1024) if os.path.exists(rule_output) else 0
-    ml_size_mb = os.path.getsize(ml_output) / (1024 * 1024) if os.path.exists(ml_output) else 0
-    
-    rule_storage_saved_mb = normal_size_mb - rule_size_mb
-    rule_storage_saved_percent = (rule_storage_saved_mb / normal_size_mb) * 100 if normal_size_mb > 0 else 0
-    
-    ml_storage_saved_mb = normal_size_mb - ml_size_mb
-    ml_storage_saved_percent = (ml_storage_saved_mb / normal_size_mb) * 100 if normal_size_mb > 0 else 0
-    
-    # Step 7: Get carbon intensity from request (set by frontend after geolocation)
-    carbon_intensity = request.form.get('carbon_intensity')
-    if carbon_intensity:
-        try:
-            carbon_intensity = float(carbon_intensity)
-            print(f"📍 Using carbon intensity: {carbon_intensity} g/kWh")
-        except:
-            carbon_intensity = DEFAULT_CARBON_INTENSITY
-            print(f"⚠️  Invalid carbon intensity, using default: {DEFAULT_CARBON_INTENSITY} g/kWh")
-    else:
+        carbon_intensity = float(carbon_intensity)
+    except:
         carbon_intensity = DEFAULT_CARBON_INTENSITY
-        print(f"ℹ️  No carbon intensity provided, using default: {DEFAULT_CARBON_INTENSITY} g/kWh")
     
-    # Step 8: Calculate energy savings and CO2 with dynamic carbon intensity
-    rule_savings = normal_energy - rule_energy
-    rule_savings_percent = (rule_savings / normal_energy) * 100 if normal_energy > 0 else 0
-    
-    ml_savings = normal_energy - ml_energy
-    ml_savings_percent = (ml_savings / normal_energy) * 100 if normal_energy > 0 else 0
-    
-    co2_normal = calculate_co2(normal_energy, carbon_intensity)
-    co2_rule = calculate_co2(rule_energy, carbon_intensity)
-    co2_ml = calculate_co2(ml_energy, carbon_intensity)
-    
-    co2_rule_saved = co2_normal - co2_rule
-    co2_ml_saved = co2_normal - co2_ml
-    
-    # Step 9: Save to Excel
-    excel_data = {
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'filename': file.filename,
-        'complexity': complexity,
-        'input_size_mb': round(input_size_mb, 2),
-        'normal_size_mb': round(normal_size_mb, 2),
-        'rule_size_mb': round(rule_size_mb, 2),
-        'ml_size_mb': round(ml_size_mb, 2),
-        'rule_storage_saved_mb': round(rule_storage_saved_mb, 2),
-        'ml_storage_saved_mb': round(ml_storage_saved_mb, 2),
-        'normal_energy': normal_energy,
-        'rule_energy': rule_energy,
-        'ml_energy': ml_energy,
-        'rule_savings_percent': round(rule_savings_percent, 2),
-        'ml_savings_percent': round(ml_savings_percent, 2),
-        'co2_normal': co2_normal,
-        'co2_rule': co2_rule,
-        'co2_ml': co2_ml,
-        'co2_rule_saved': round(co2_rule_saved, 4),
-        'co2_ml_saved': round(co2_ml_saved, 4)
+    # Initialize job status
+    jobs[job_id] = {
+        'status': 'processing',
+        'progress': 0,
+        'result': None,
+        'error': None,
+        'filename': file.filename
     }
-    save_to_excel(excel_data)
     
-    # Step 10: Return results with all 3 comparisons
+    # Start background processing
+    thread = threading.Thread(
+        target=process_video_background,
+        args=(job_id, input_path, file.filename, carbon_intensity)
+    )
+    thread.daemon = True
+    thread.start()
+    
+    print(f"✅ Job {job_id} started in background")
+    
+    # Return job ID immediately
+    return jsonify({'job_id': job_id}), 202
+    
+@app.route('/status/<job_id>', methods=['GET'])
+def get_job_status(job_id):
+    """Poll endpoint to check job progress"""
+    if job_id not in jobs:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    job = jobs[job_id]
     return jsonify({
-        'complexity': complexity,
-        'input_size_mb': round(input_size_mb, 2),
-        'normal_size_mb': round(normal_size_mb, 2),
-        'rule_size_mb': round(rule_size_mb, 2),
-        'ml_size_mb': round(ml_size_mb, 2),
-        'rule_storage_saved_mb': round(rule_storage_saved_mb, 2),
-        'rule_storage_saved_percent': round(rule_storage_saved_percent, 2),
-        'ml_storage_saved_mb': round(ml_storage_saved_mb, 2),
-        'ml_storage_saved_percent': round(ml_storage_saved_percent, 2),
-        'normal_energy': normal_energy,
-        'normal_time': normal_time,
-        'normal_settings': normal_settings,
-        'rule_energy': rule_energy,
-        'rule_time': rule_time,
-        'rule_settings': rule_settings,
-        'ml_energy': ml_energy,
-        'ml_time': ml_time,
-        'ml_settings': ml_settings,
-        'rule_savings': round(rule_savings, 2),
-        'rule_savings_percent': round(rule_savings_percent, 2),
-        'ml_savings': round(ml_savings, 2),
-        'ml_savings_percent': round(ml_savings_percent, 2),
-        'co2_normal': co2_normal,
-        'co2_rule': co2_rule,
-        'co2_ml': co2_ml,
-        'co2_rule_saved': round(co2_rule_saved, 4),
-        'co2_ml_saved': round(co2_ml_saved, 4),
-        'ml_available': ML_AVAILABLE,
-        'normal_video_url': f'/outputs/normal_{file.filename}',
-        'rule_video_url': f'/outputs/rule_{file.filename}',
-        'ml_video_url': f'/outputs/ml_{file.filename}'
+        'status': job['status'],
+        'progress': job['progress'],
+        'result': job['result'],
+        'error': job['error']
     })
+
+def process_video_background(job_id, input_path, filename, carbon_intensity):
+    """Background processing function"""
+    try:
+        # Extract video metadata
+        jobs[job_id]['progress'] = 5
+        try:
+            cap = cv2.VideoCapture(input_path)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = int(cap.get(cv2.CAP_PROP_FPS))
+            cap.release()
+            size_mb = os.path.getsize(input_path) / (1024 * 1024)
+            
+            video_info = {
+                'width': width,
+                'height': height,
+                'fps': fps,
+                'size_mb': size_mb
+            }
+            print(f"📊 Video: {width}x{height} @ {fps}fps, {size_mb:.2f}MB")
+        except Exception as e:
+            print(f"⚠️ Could not extract metadata: {e}")
+            video_info = None
+        
+        # Step 1: Get input file size
+        input_size_mb = os.path.getsize(input_path) / (1024 * 1024)
+        
+        # Step 2: Analyze video complexity
+        jobs[job_id]['progress'] = 10
+        print("Analyzing video complexity...")
+        complexity = analyze_video_complexity(input_path)
+        print(f"Complexity score: {complexity}/10")
+        
+        # Step 3: Normal transcoding (standard settings)
+        jobs[job_id]['progress'] = 20
+        normal_output = os.path.join(OUTPUT_FOLDER, 'normal_' + filename)
+        normal_energy, normal_time, normal_settings = transcode_video(
+            input_path, normal_output, 'normal', complexity, video_info
+        )
+        
+        # Step 4: Rule-based Green AI transcoding
+        jobs[job_id]['progress'] = 50
+        rule_output = os.path.join(OUTPUT_FOLDER, 'rule_' + filename)
+        rule_energy, rule_time, rule_settings = transcode_video(
+            input_path, rule_output, 'rule', complexity, video_info
+        )
+        
+        # Step 5: ML-based Green AI transcoding (if available)
+        jobs[job_id]['progress'] = 80
+        if ML_AVAILABLE:
+            ml_output = os.path.join(OUTPUT_FOLDER, 'ml_' + filename)
+            ml_energy, ml_time, ml_settings = transcode_video(
+                input_path, ml_output, 'ml', complexity, video_info
+            )
+        else:
+            # Fallback to rule-based if ML not available
+            ml_output = rule_output
+            ml_energy, ml_time, ml_settings = rule_energy, rule_time, rule_settings.copy()
+            ml_settings['mode'] = 'ML (Unavailable - Using Rules)'
+        
+        # Step 6: Get output file sizes and calculate storage savings
+        normal_size_mb = os.path.getsize(normal_output) / (1024 * 1024) if os.path.exists(normal_output) else 0
+        rule_size_mb = os.path.getsize(rule_output) / (1024 * 1024) if os.path.exists(rule_output) else 0
+        ml_size_mb = os.path.getsize(ml_output) / (1024 * 1024) if os.path.exists(ml_output) else 0
+        
+        rule_storage_saved_mb = normal_size_mb - rule_size_mb
+        rule_storage_saved_percent = (rule_storage_saved_mb / normal_size_mb) * 100 if normal_size_mb > 0 else 0
+        
+        ml_storage_saved_mb = normal_size_mb - ml_size_mb
+        ml_storage_saved_percent = (ml_storage_saved_mb / normal_size_mb) * 100 if normal_size_mb > 0 else 0
+        
+        # Step 7: Calculate energy savings and CO2 with dynamic carbon intensity
+        rule_savings = normal_energy - rule_energy
+        rule_savings_percent = (rule_savings / normal_energy) * 100 if normal_energy > 0 else 0
+        
+        ml_savings = normal_energy - ml_energy
+        ml_savings_percent = (ml_savings / normal_energy) * 100 if normal_energy > 0 else 0
+        
+        co2_normal = calculate_co2(normal_energy, carbon_intensity)
+        co2_rule = calculate_co2(rule_energy, carbon_intensity)
+        co2_ml = calculate_co2(ml_energy, carbon_intensity)
+        
+        co2_rule_saved = co2_normal - co2_rule
+        co2_ml_saved = co2_normal - co2_ml
+        
+        # Step 8: Save to Excel
+        jobs[job_id]['progress'] = 95
+        excel_data = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'filename': filename,
+            'complexity': complexity,
+            'input_size_mb': round(input_size_mb, 2),
+            'normal_size_mb': round(normal_size_mb, 2),
+            'rule_size_mb': round(rule_size_mb, 2),
+            'ml_size_mb': round(ml_size_mb, 2),
+            'rule_storage_saved_mb': round(rule_storage_saved_mb, 2),
+            'ml_storage_saved_mb': round(ml_storage_saved_mb, 2),
+            'normal_energy': normal_energy,
+            'rule_energy': rule_energy,
+            'ml_energy': ml_energy,
+            'rule_savings_percent': round(rule_savings_percent, 2),
+            'ml_savings_percent': round(ml_savings_percent, 2),
+            'co2_normal': co2_normal,
+            'co2_rule': co2_rule,
+            'co2_ml': co2_ml,
+            'co2_rule_saved': round(co2_rule_saved, 4),
+            'co2_ml_saved': round(co2_ml_saved, 4)
+        }
+        save_to_excel(excel_data)
+        
+        # Step 9: Store results
+        jobs[job_id]['status'] = 'completed'
+        jobs[job_id]['progress'] = 100
+        jobs[job_id]['result'] = {
+            'complexity': complexity,
+            'input_size_mb': round(input_size_mb, 2),
+            'normal_size_mb': round(normal_size_mb, 2),
+            'rule_size_mb': round(rule_size_mb, 2),
+            'ml_size_mb': round(ml_size_mb, 2),
+            'rule_storage_saved_mb': round(rule_storage_saved_mb, 2),
+            'rule_storage_saved_percent': round(rule_storage_saved_percent, 2),
+            'ml_storage_saved_mb': round(ml_storage_saved_mb, 2),
+            'ml_storage_saved_percent': round(ml_storage_saved_percent, 2),
+            'normal_energy': normal_energy,
+            'normal_time': normal_time,
+            'normal_settings': normal_settings,
+            'rule_energy': rule_energy,
+            'rule_time': rule_time,
+            'rule_settings': rule_settings,
+            'ml_energy': ml_energy,
+            'ml_time': ml_time,
+            'ml_settings': ml_settings,
+            'rule_savings': round(rule_savings, 2),
+            'rule_savings_percent': round(rule_savings_percent, 2),
+            'ml_savings': round(ml_savings, 2),
+            'ml_savings_percent': round(ml_savings_percent, 2),
+            'co2_normal': co2_normal,
+            'co2_rule': co2_rule,
+            'co2_ml': co2_ml,
+            'co2_rule_saved': round(co2_rule_saved, 4),
+            'co2_ml_saved': round(co2_ml_saved, 4),
+            'ml_available': ML_AVAILABLE,
+            'normal_video_url': f'/outputs/normal_{filename}',
+            'rule_video_url': f'/outputs/rule_{filename}',
+            'ml_video_url': f'/outputs/ml_{filename}'
+        }
+        
+        print(f"✅ Job {job_id} completed successfully")
+        
+    except Exception as e:
+        print(f"❌ Job {job_id} failed: {e}")
+        jobs[job_id]['status'] = 'failed'
+        jobs[job_id]['error'] = str(e)
 
 def transcode_video(input_path, output_path, mode, complexity, video_info=None):
     """
